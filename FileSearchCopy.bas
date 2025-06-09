@@ -5,12 +5,9 @@ Sub SearchAndCopyFiles()
     keyword = InputBox("請輸入要搜尋的關鍵字：（不分大小寫）")
     If keyword = "" Then Exit Sub
 
-    Dim defaultExt As String
-    defaultExt = "*.ppt;*.doc;*.docx;*.xls;*.xlsm;*.pdf;*.txt;*.pptx"
-
-    Dim extInput As String
-    extInput = InputBox("請輸入要搜尋的檔案格式，以分號;分隔:\n例如: *.ppt;*.docx;*.pdf", "檔案格式", defaultExt)
-    If extInput = "" Then Exit Sub
+    Dim exts() As String
+    exts = SelectExtensions()
+    If Not IsArray(exts) Then Exit Sub
 
     Dim srcFolder As String
     srcFolder = GetFolder("選取來源資料夾")
@@ -20,8 +17,6 @@ Sub SearchAndCopyFiles()
     destFolder = GetFolder("選取目的資料夾")
     If destFolder = "" Then Exit Sub
 
-    Dim exts() As String
-    exts = Split(extInput, ";")
 
     Dim sht As Worksheet
     Set sht = ActiveSheet
@@ -45,6 +40,82 @@ Function GetFolder(prompt As String) As String
     Else
         GetFolder = ""
     End If
+End Function
+
+Function SelectExtensions() As Variant
+    Dim types As Variant
+    types = Array("*.ppt", "*.doc", "*.docx", "*.xls", "*.xlsm", "*.pdf", "*.txt", "*.pptx")
+
+    Dim frm As Object
+    Set frm = VBA.UserForms.Add
+    frm.Caption = "選擇檔案格式"
+
+    Dim chk() As Object
+    ReDim chk(UBound(types))
+    Dim i As Integer, topPos As Double
+    topPos = 10
+    For i = LBound(types) To UBound(types)
+        Set chk(i) = frm.Controls.Add("Forms.CheckBox.1", "chk" & i)
+        chk(i).Caption = types(i)
+        chk(i).Left = 10
+        chk(i).Top = topPos
+        chk(i).Width = 100
+        chk(i).Value = True
+        topPos = topPos + 18
+    Next i
+
+    Dim btnOK As Object, btnCancel As Object
+    Set btnOK = frm.Controls.Add("Forms.CommandButton.1", "btnOK")
+    btnOK.Caption = "確定"
+    btnOK.Left = 10
+    btnOK.Top = topPos + 10
+    btnOK.Width = 50
+
+    Set btnCancel = frm.Controls.Add("Forms.CommandButton.1", "btnCancel")
+    btnCancel.Caption = "取消"
+    btnCancel.Left = 70
+    btnCancel.Top = topPos + 10
+    btnCancel.Width = 50
+
+    With frm.CodeModule
+        Dim baseLine As Long
+        baseLine = .CountOfLines + 1
+        .InsertLines baseLine, "Private mCancel As Boolean" & vbCrLf & _
+            "Private Sub btnCancel_Click()" & vbCrLf & _
+            "    mCancel = True" & vbCrLf & _
+            "    Me.Hide" & vbCrLf & _
+            "End Sub" & vbCrLf & _
+            "Private Sub btnOK_Click()" & vbCrLf & _
+            "    Me.Hide" & vbCrLf & _
+            "End Sub" & vbCrLf & _
+            "Public Property Get Canceled() As Boolean" & vbCrLf & _
+            "    Canceled = mCancel" & vbCrLf & _
+            "End Property"
+    End With
+
+    frm.Show vbModal
+
+    If VBA.CallByName(frm, "Canceled", VbMethod) Then
+        SelectExtensions = Empty
+    Else
+        Dim coll As New Collection
+        For i = LBound(types) To UBound(types)
+            If chk(i).Value = True Then
+                coll.Add types(i)
+            End If
+        Next i
+        If coll.Count = 0 Then
+            SelectExtensions = Empty
+        Else
+            Dim result() As String
+            ReDim result(0 To coll.Count - 1)
+            For i = 1 To coll.Count
+                result(i - 1) = coll(i)
+            Next i
+            SelectExtensions = result
+        End If
+    End If
+    Unload frm
 End Function
 
 Sub SearchAndCopy(ByVal folder As Object, keyword As String, exts() As String, destFolder As String, sht As Worksheet, ByRef rowNum As Long)
